@@ -1,0 +1,9 @@
+w_goal_dist = 1
+w_goal_ang = 1
+w_monster_dist = 1
+w_monster_ang = 1
+w_explosion_dist = 1
+w_explosion_ang = 1
+w_bomb_dist = 1
+w_bomb_ang = 1
+w_bomb_danger = 1
