@@ -15,7 +15,8 @@ class TestCharacter(CharacterEntity):
         Qs = np.load("qs.npy", allow_pickle=True).item()
         self.next_move(wrld, Qs)
         action = self.action
-        print(Qs, action)
+        # print(Qs, action)
+
         if action == "up left":
             self.move(-1, -1)
         elif action == "up":
@@ -141,6 +142,7 @@ class TestCharacter(CharacterEntity):
             if result is not None:
                 monster_paths.append(result)
 
+        monster = (0,0)
         if monster_paths:
             monster_dist = len(monster_paths[0])
             monster_ang = math.atan2(monster_paths[0][0][1] - self.y, monster_paths[0][0][0] - self.x)
@@ -148,10 +150,10 @@ class TestCharacter(CharacterEntity):
                 if len(path) < monster_dist:
                     monster_dist = len(path)
                     monster_ang = math.atan2(path[0][1] - self.y, path[0][0] - self.x)
+                    monster = path[0]
         else:
             monster_dist = 26
             monster_ang = 0
-
 
         explosion_paths = []
         for explosion in self.explosions(wrld):
@@ -159,6 +161,7 @@ class TestCharacter(CharacterEntity):
             if result is not None:
                 explosion_paths.append(result)
 
+        explosion = (0,0)
         if explosion_paths:
             explosion_dist = len(explosion_paths[0])
             explosion_ang = math.atan2(explosion_paths[0][0][1] - self.y, explosion_paths[0][0][0] - self.x)
@@ -166,6 +169,7 @@ class TestCharacter(CharacterEntity):
                 if len(path) < explosion_dist:
                     explosion_dist = len(path)
                     explosion_ang = math.atan2(path[0][1] - self.y, path[0][0] - self.x)
+                    explosion = path[0]
         else:
             explosion_dist = 26
             explosion_ang = 0
@@ -182,10 +186,11 @@ class TestCharacter(CharacterEntity):
             bomb_ang = 45
 
         bomb_danger = 0
-        if bomb_ang == 0 or abs(bomb_ang - math.pi/2) < 0.01 or abs(bomb_ang - math.pi) < 0.01 or abs(bomb_ang - 3*math.pi/2) < 0.01:
+        if abs(bomb_ang - 0) < 0.01 or abs(bomb_ang - math.pi/2) < 0.01 or abs(bomb_ang - math.pi) < 0.01  or abs(bomb_ang + math.pi/2) < 0.01:
             bomb_danger = 1
 
-        return goal_dist, monster_dist, explosion_dist, bomb_dist, bomb_danger
+        return (self.x, self.y), bomb_danger
+
 
     def next_move(self, wrld, Qs):
         state = self.calc_values(wrld)
@@ -206,7 +211,7 @@ class TestCharacter(CharacterEntity):
                 action_dict[action] = 1
 
         count = 0
-        if sum != 10:
+        if sum != 10 and sum > 0:
             rand = random.random() * sum
             for action in action_dict:
                 if count + action_dict[action] > rand:

@@ -1,5 +1,6 @@
 # This is necessary to find the main code
 import math
+import random
 import sys
 
 import numpy as np
@@ -18,7 +19,7 @@ with open('weights.txt', 'r') as fd:
     w_bomb_ang = int(fd.readline().split()[2])
     w_bomb_danger = int(fd.readline().split()[2])
 
-weights = [w_goal_dist, w_monster_dist, w_explosion_dist, w_bomb_dist, w_bomb_danger]
+weights = [w_bomb_danger]
 
 sys.path.insert(0, '../bomberman')
 sys.path.insert(1, '..')
@@ -38,7 +39,7 @@ gamma = 0.8
 Q = {}
 prevState = None
 prevAction = None
-alpha = 0.0000001
+alpha = 0.00001
 
 for step in range(n_steps):
     print(step)
@@ -47,7 +48,7 @@ for step in range(n_steps):
 
     character = TestCharacter("me" + str(step),  # name
                               "C",  # avatar
-                              0, 0  # position
+                              random.randint(0, g.world.width()-1), random.randint(0, g.world.height()-1)  # position
                               )
     # TODO Add your character
     g.add_character(character)
@@ -80,30 +81,39 @@ for step in range(n_steps):
 
         load = np.load("qs.npy", allow_pickle=True).item()
         state = character.calc_values(g.world)
-        next_move = character.action
 
-        Q[state, next_move] = 0
-        for i, val in enumerate(state):
-            Q[state, next_move] += weights[i] * val
-        print(g.world.events)
-        if (prevState, prevAction) in Q:
-            r = -1
-            for e in g.world.events:
-                if e.tpe == Event.BOMB_HIT_CHARACTER:
-                    r -= 100
-                elif e.tpe == Event.BOMB_HIT_WALL:
-                    r += 100
-                elif e.tpe == Event.BOMB_HIT_MONSTER:
-                    r += 100
-                elif e.tpe == Event.CHARACTER_KILLED_BY_MONSTER:
-                    r -= 100
-                elif e.tpe == Event.CHARACTER_FOUND_EXIT:
-                    r += 100000
+        actions = ["up left", "up", "up right",
+                   "left", "stay", "right",
+                   "down left", "down", "down right", "bomb"]
+        max_action = 0
+        for action in actions:
+            if not (state, action) in Q:
+                Q[state, action] = 0
+                for i, weight in enumerate(weights):
+                    Q[state, action] += weight * state[i+1]
 
-            delta = r + gamma * Q[state, next_move] - Q[prevState, prevAction]
-            print(r)
-            for i, weight in enumerate(weights):
-                weights[i] += alpha * delta * state[i]
+            if Q[state, action] > max_action:
+                max_action = Q[state, action]
+
+        r = -1
+        for e in g.world.events:
+            if e.tpe == Event.BOMB_HIT_CHARACTER:
+                r -= 100
+            elif e.tpe == Event.BOMB_HIT_WALL:
+                r += 10
+            elif e.tpe == Event.BOMB_HIT_MONSTER:
+                r += 100
+            elif e.tpe == Event.CHARACTER_KILLED_BY_MONSTER:
+                r -= 1000
+            elif e.tpe == Event.CHARACTER_FOUND_EXIT:
+                r += 10000
+
+        delta = r + gamma * max_action - Q[prevState, prevAction]
+        Q[prevState, prevAction] += alpha*delta
+        for i, weight in enumerate(weights):
+            weights[i] += alpha * delta * state[i+1]
+
+        # print(weights)
 
     np.save('qs.npy', Q)
 
