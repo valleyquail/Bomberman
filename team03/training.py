@@ -9,17 +9,12 @@ import colorama
 np.save('qs.npy', {})
 
 with open('weights.txt', 'r') as fd:
+    w_can_bomb = int(fd.readline().split()[2])
+    w_bomb_to_self = int(fd.readline().split()[2])
+    w_wall_to_self = int(fd.readline().split()[2])
     w_goal_dist = int(fd.readline().split()[2])
-    w_goal_ang = int(fd.readline().split()[2])
-    w_monster_dist = int(fd.readline().split()[2])
-    w_monster_ang = int(fd.readline().split()[2])
-    w_explosion_dist = int(fd.readline().split()[2])
-    w_explosion_ang = int(fd.readline().split()[2])
-    w_bomb_dist = int(fd.readline().split()[2])
-    w_bomb_ang = int(fd.readline().split()[2])
-    w_bomb_danger = int(fd.readline().split()[2])
 
-weights = [w_bomb_danger]
+weights = [w_can_bomb, w_goal_dist]
 
 sys.path.insert(0, '../bomberman')
 sys.path.insert(1, '..')
@@ -44,7 +39,7 @@ alpha = 0.00001
 for step in range(n_steps):
     print(step)
     # Create the game
-    g = Game.fromfile('project2/map.txt', sprite_dir="../bomberman/sprites/")
+    g = Game.fromfile('project1/map.txt', sprite_dir="../bomberman/sprites/")
 
     character = TestCharacter("me" + str(step),  # name
                               "C",  # avatar
@@ -52,10 +47,10 @@ for step in range(n_steps):
                               )
     # TODO Add your character
     g.add_character(character)
-    g.add_monster(StupidMonster("stupid",  # name
-                                "S",  # avatar
-                                3, 9  # position
-                                ))
+    # g.add_monster(StupidMonster("stupid",  # name
+    #                             "S",  # avatar
+    #                             3, 9  # position
+    #                             ))
 
 
     """ Main game loop. """
@@ -70,6 +65,7 @@ for step in range(n_steps):
     step()
 
     while not g.done():
+        # print(Q)
         prevState = character.calc_values(g.world)
         prevAction = character.action
 
@@ -81,26 +77,29 @@ for step in range(n_steps):
 
         load = np.load("qs.npy", allow_pickle=True).item()
         state = character.calc_values(g.world)
+        # print(state)
 
         actions = ["up left", "up", "up right",
                    "left", "stay", "right",
                    "down left", "down", "down right", "bomb"]
         max_action = 0
+        best_action = "stay"
         for action in actions:
             if not (state, action) in Q:
                 Q[state, action] = 0
                 for i, weight in enumerate(weights):
-                    Q[state, action] += weight * state[i+1]
+                    Q[state, action] += weight * np.linalg.norm(state[i])
 
             if Q[state, action] > max_action:
                 max_action = Q[state, action]
+                best_action = action
 
         r = -1
         for e in g.world.events:
             if e.tpe == Event.BOMB_HIT_CHARACTER:
                 r -= 100
             elif e.tpe == Event.BOMB_HIT_WALL:
-                r += 10
+                r += 100
             elif e.tpe == Event.BOMB_HIT_MONSTER:
                 r += 100
             elif e.tpe == Event.CHARACTER_KILLED_BY_MONSTER:
@@ -111,11 +110,12 @@ for step in range(n_steps):
         delta = r + gamma * max_action - Q[prevState, prevAction]
         Q[prevState, prevAction] += alpha*delta
         for i, weight in enumerate(weights):
-            weights[i] += alpha * delta * state[i+1]
+            weights[i] += alpha * delta * np.linalg.norm(state[i])
 
         # print(weights)
+        print(Q[state, best_action], state, best_action)
 
-    np.save('qs.npy', Q)
+        np.save('qs.npy', Q)
 
 
     colorama.deinit()
