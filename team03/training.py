@@ -34,7 +34,7 @@ gamma = 0.8
 Q = {}
 prevState = None
 prevAction = None
-alpha = 0.00001
+alpha = 0.0001
 
 for step in range(n_steps):
     print(step)
@@ -65,7 +65,7 @@ for step in range(n_steps):
     step()
 
     while not g.done():
-        # print(Q)
+        print(Q)
         prevState = character.calc_values(g.world)
         prevAction = character.action
 
@@ -77,6 +77,7 @@ for step in range(n_steps):
 
         load = np.load("qs.npy", allow_pickle=True).item()
         state = character.calc_values(g.world)
+        f_states = [state[0], 1/state[1]]
         # print(state)
 
         actions = ["up left", "up", "up right",
@@ -88,7 +89,7 @@ for step in range(n_steps):
             if not (state, action) in Q:
                 Q[state, action] = 0
                 for i, weight in enumerate(weights):
-                    Q[state, action] += weight * np.linalg.norm(state[i])
+                        Q[state, action] += weight * np.linalg.norm(f_states[i])
 
             if Q[state, action] > max_action:
                 max_action = Q[state, action]
@@ -110,7 +111,7 @@ for step in range(n_steps):
         delta = r + gamma * max_action - Q[prevState, prevAction]
         Q[prevState, prevAction] += alpha*delta
         for i, weight in enumerate(weights):
-            weights[i] += alpha * delta * np.linalg.norm(state[i])
+            weights[i] += alpha * delta * np.linalg.norm(f_states[i])
 
         # print(weights)
         print(Q[state, best_action], state, best_action)
