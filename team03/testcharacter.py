@@ -34,7 +34,7 @@ class TestCharacter(CharacterEntity):
         elif action == "down":
             self.move(0, 1)
         elif action == "down right":
-            self.move(-1, 1)
+            self.move(1, 1)
         elif action == "bomb":
             self.place_bomb()
 
@@ -244,16 +244,17 @@ class TestCharacter(CharacterEntity):
         bomb_ang = self.convertAng(bomb_ang)
         wall_ang = self.convertAng(wall_ang)
         goal_ang = self.convertAng(goal_ang)
-        return can_bomb, goal_dist, bomb_ang, goal_ang, tuple(close_walls)
+
+        return can_bomb, goal_dist, bomb_ang, tuple(close_walls)
 
 
     def next_move(self, wrld, Qs):
         state = self.calc_values(wrld)
         sum = 0
 
-        actions = ["up left", "up", "up right",
-                   "left", "stay", "right",
-                   "down left", "down", "down right", "bomb"]
+        actions = ["down right", "down", "down left",
+                   "right", "stay", "left",
+                   "up right", "up", "up left", "bomb"]
         action_dict = {}
         for action in actions:
             if (state, action) in Qs:

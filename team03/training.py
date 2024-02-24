@@ -34,16 +34,17 @@ gamma = 0.8
 Q = {}
 prevState = None
 prevAction = None
-alpha = 0.0001
+alpha = 0.01
 
 for step in range(n_steps):
     print(step)
     # Create the game
     g = Game.fromfile('project1/map.txt', sprite_dir="../bomberman/sprites/")
 
+    print(step, g.world.width(), g.world.height())
     character = TestCharacter("me" + str(step),  # name
                               "C",  # avatar
-                              random.randint(0, g.world.width()-1), random.randint(0, g.world.height()-1)  # position
+                              (step + g.world.width()-2) % g.world.width(), (step + g.world.height()-2) % g.world.height()  # position
                               )
     # TODO Add your character
     g.add_character(character)
@@ -57,7 +58,7 @@ for step in range(n_steps):
     def step():
         # pygame.event.clear()
         # input("Press Enter to continue or CTRL-C to stop...")
-        pygame.time.wait(abs(1))
+        pygame.time.wait(abs(0))
 
     colorama.init(autoreset=True)
     g.display_gui()
@@ -65,7 +66,7 @@ for step in range(n_steps):
     step()
 
     while not g.done():
-        print(Q)
+        # print(Q)
         prevState = character.calc_values(g.world)
         prevAction = character.action
 
@@ -77,19 +78,19 @@ for step in range(n_steps):
 
         load = np.load("qs.npy", allow_pickle=True).item()
         state = character.calc_values(g.world)
-        f_states = [state[0], 1/state[1]]
+        f_states = [state[0], 10/state[1]]
         # print(state)
 
-        actions = ["up left", "up", "up right",
-                   "left", "stay", "right",
-                   "down left", "down", "down right", "bomb"]
-        max_action = 0
+        actions = ["down right", "down", "down left",
+                   "right", "stay", "left",
+                   "up right", "up", "up left", "bomb"]
+        max_action = -10000
         best_action = "stay"
         for action in actions:
             if not (state, action) in Q:
                 Q[state, action] = 0
                 for i, weight in enumerate(weights):
-                        Q[state, action] += weight * np.linalg.norm(f_states[i])
+                    Q[state, action] += weight * np.linalg.norm(f_states[i])
 
             if Q[state, action] > max_action:
                 max_action = Q[state, action]
@@ -100,7 +101,7 @@ for step in range(n_steps):
             if e.tpe == Event.BOMB_HIT_CHARACTER:
                 r -= 100
             elif e.tpe == Event.BOMB_HIT_WALL:
-                r += 100
+                r += 10
             elif e.tpe == Event.BOMB_HIT_MONSTER:
                 r += 100
             elif e.tpe == Event.CHARACTER_KILLED_BY_MONSTER:
@@ -113,7 +114,7 @@ for step in range(n_steps):
         for i, weight in enumerate(weights):
             weights[i] += alpha * delta * np.linalg.norm(f_states[i])
 
-        # print(weights)
+        print(weights)
         print(Q[state, best_action], state, best_action)
 
         np.save('qs.npy', Q)
