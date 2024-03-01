@@ -4,6 +4,7 @@ import random
 import sys
 import numpy as np
 sys.path.insert(0, '../bomberman')
+from events import Event
 # Import necessary stuff
 from entity import CharacterEntity
 from colorama import Fore, Back
@@ -12,13 +13,22 @@ from priority_queue import PriorityQueue
 class TestCharacter(CharacterEntity):
     action = "stay"
     path = None
+    alpha = 0.001
+    gamma = 0.8
+
+    with open('weights.txt', 'r') as fd:
+        w_path_to_goal = float(fd.readline().split()[2])
+        w_goal_dist = float(fd.readline().split()[2])
+        w_bomb_dist = float(fd.readline().split()[2])
+        w_monster_dist = float(fd.readline().split()[2])
+
+    weights = [w_path_to_goal, w_goal_dist, w_bomb_dist, w_monster_dist]
+
     def do(self, wrld):
-        Qs = np.load("qs.npy", allow_pickle=True).item()
-        self.next_move(wrld, Qs)
+        self.next_move(wrld)
         action = self.action
-        # print(Qs)
-        # print(self.calc_values(wrld))
-        print(action)
+
+        print(action, self.weights)
 
         if action == "up left":
             self.move(-1, -1)
@@ -42,7 +52,6 @@ class TestCharacter(CharacterEntity):
             self.place_bomb()
         elif action == "path":
             self.move(self.path[1][0] - self.x, self.path[1][1] - self.y)
-
 
 
     def a_star(self, goal, start, wrld):
@@ -151,238 +160,159 @@ class TestCharacter(CharacterEntity):
         return boundaries
 
     def calc_values(self, wrld):
+        try:
+            new_bomberman = next(iter(wrld.characters.values()))
+            new_bomberman = new_bomberman[0]
+        except:
+            return 0, 0.001, 1, 1
+
         goal = self.goal(wrld)
-        path_to_goal = self.a_star(goal, (self.x, self.y), wrld)
+        goal_dist = max(goal[0] - new_bomberman.x, goal[1] - new_bomberman.y)
+
+        path_to_goal = self.a_star(goal, (new_bomberman.x, new_bomberman.y), wrld)
 
         if path_to_goal:
-            goal_dist = len(path_to_goal)
-            goal_ang = math.atan2(self.y - goal[1], self.x - goal[0])
+            path_to_goal = 1
         else:
-            goal_dist = 100
-            goal_ang = 0
-
+            path_to_goal = 0
 
         explosion_paths = []
         for explosion in self.explosions(wrld):
-            result = self.a_star((self.x, self.y), explosion, wrld)
+            result = self.a_star((new_bomberman.x, new_bomberman.y), explosion, wrld)
             if result is not None:
                 explosion_paths.append(result)
-
-        explosion = None
+        explosion_dist = 100
         if explosion_paths:
             explosion_dist = len(explosion_paths[0])
-            explosion = explosion_paths[0][0]
-            explosion_ang = math.atan2(explosion_paths[0][0][1] - self.y, explosion_paths[0][0][0] - self.x)
-
-            if self.y == explosion[1] and self.x == explosion[0]:
-                explosion_ang = 404
-
             for path in explosion_paths:
                 if len(path) < explosion_dist:
-
                     explosion_dist = len(path)
-                    explosion_ang = math.atan2(path[0][1] - self.y, path[0][0] - self.x)
-                    explosion = path[0]
 
-                    if self.y == explosion[1] and self.x == explosion[0]:
-                        explosion_ang = 404
-        else:
-            explosion_ang = None
 
         bomb = self.bomb(wrld)
-        path_to_bomb = self.a_star((self.x, self.y), bomb, wrld)
+        bomb_dist = 100
+        path_to_bomb = self.a_star((new_bomberman.x, new_bomberman.y), bomb, wrld)
         if path_to_bomb is not None:
-            bomb_dist = len(path_to_bomb)
-            bomb_ang = math.atan2(bomb[1] - self.y, bomb[0] - self.x)
-            if self.y == bomb[1] and self.x == bomb[0]:
-                bomb_ang = 404
-        else:
-            bomb_dist = 26
-            bomb_ang = None
+            bomb_dist = max(abs(bomb[0] - new_bomberman.x), abs(bomb[1] - new_bomberman.y))
+            if bomb[0] == new_bomberman.x or bomb[1] == new_bomberman.y:
+                bomb_dist = 0.1
 
-        bomb_down = 0
-        bomb_to_self = (26, 26)
-        if explosion:
-            bomb_ang = explosion_ang
+        if explosion_paths:
+            bomb_dist = explosion_dist
 
-        bomb_ang = self.convertAng(bomb_ang)
 
         monster_paths = []
         for monster in self.monsters(wrld):
-            result = self.a_star((self.x, self.y), monster, wrld)
+            result = self.a_star((new_bomberman.x, new_bomberman.y), monster, wrld)
             if result is not None:
                 monster_paths.append(result)
 
-        monster = None
-        monster_to_self = None
         if monster_paths:
             monster_dist = len(monster_paths[0])
-            monster_ang = math.atan2(monster_paths[0][0][1] - self.y, monster_paths[0][0][0] - self.x)
-            monster = monster_paths[0][0]
-            if monster_dist <= 4 and abs(monster[0] - self.x) <= 4 and abs(monster[1] - self.y) <= 4:
-                monster_to_self = (max(min(monster[0] - self.x, 4), -4), max(min(monster[1] - self.y, 4), -4))
-
-            if self.y == monster[1] and self.x == monster[0]:
-                monster_ang = 404
-
             for path in monster_paths:
                 if len(path) < monster_dist:
                     monster_dist = len(path)
-                    monster_ang = math.atan2(path[0][1] - self.y, path[0][0] - self.x)
-                    monster = path[0]
-                    if monster_dist <= 4 and abs(monster[0] - self.x) <= 4 and abs(monster[1] - self.y) <= 4:
-                        monster_to_self = (max(min(monster[0] - self.x, 4), -4), max(min(monster[1] - self.y, 4), -4))
-
-                    if self.y == monster[1] and self.x == monster[0]:
-                        monster_ang = 404
         else:
             monster_dist = 100
-            monster_ang = None
 
-        walls = self.walls(wrld)
-        wall_to_self = (26, 26)
-        wall_dist = 26
-        wall_ang = None
-
-        close_walls = []
-        for wall in walls:
-            dist = (self.x - wall[0], self.y - wall[1])
-            if (dist == (1, 1) or dist == (1, 0) or dist == (1, -1) or dist == (0, 1) or
-                    dist == (0, 0) or dist == (0, -1) or dist == (-1, 1) or dist == (-1, 0) or dist == (-1, -1)):
-                if dist == (1,1):
-                    dist = 'NW'
-                elif dist == (1,0):
-                    dist = 'W'
-                elif dist == (1,-1):
-                    dist = 'SW'
-                elif dist == (0,1):
-                    dist = 'N'
-                elif dist == (0,0):
-                    dist = 'ON TOP'
-                elif dist == (0,-1):
-                    dist = 'S'
-                elif dist == (-1,1):
-                    dist = 'NE'
-                elif dist == (-1,0):
-                    dist = 'E'
-                elif dist == (-1,-1):
-                    dist = 'SE'
-
-                close_walls.append(dist)
-
-        boundaries = self.boundaries(wrld)
-        close_boundaries = []
-        for boundary in boundaries:
-            dist = (self.x - boundary[0], self.y - boundary[1])
-
-            if (dist == (1, 1) or dist == (1, 0) or dist == (1, -1) or dist == (0, 1) or
-                    dist == (0, 0) or dist == (0, -1) or dist == (-1, 1) or dist == (-1, 0) or dist == (-1, -1)):
-
-                if dist == (1,1):
-                    dist = 'NW'
-                elif dist == (1,0):
-                    dist = 'W'
-                elif dist == (1,-1):
-                    dist = 'SW'
-                elif dist == (0,1):
-                    dist = 'N'
-                elif dist == (0,0):
-                    dist = 'ON TOP'
-                elif dist == (0,-1):
-                    dist = 'S'
-                elif dist == (-1,1):
-                    dist = 'NE'
-                elif dist == (-1,0):
-                    dist = 'E'
-                elif dist == (-1,-1):
-                    dist = 'SE'
-                close_boundaries.append(dist)
-
-        close_walls.sort()
-        close_boundaries.sort()
-
-        return bomb_down, goal_dist+1, bomb_ang, tuple(close_walls), tuple(close_boundaries), monster_to_self
+        return path_to_goal, 1/(goal_dist+1), 1/(bomb_dist+1), 1/math.sqrt(monster_dist)
 
 
-    def next_move(self, wrld, Qs):
-        state = self.calc_values(wrld)
-
+    def next_move(self, wrld):
         goal = self.goal(wrld)
         path_to_goal = self.a_star(goal, (self.x, self.y), wrld)
 
         if not path_to_goal:
-            n_unexplored = 0
+            s_current = self.calc_values(wrld)
+            q_current = self.calc_q(s_current)
+            print(s_current, q_current)
+
+            if s_current[2] == 1/101:
+                self.place_bomb()
+
             actions = ["down right", "down", "down left",
                        "right", "stay", "left",
-                       "up right", "up", "up left", "bomb"]
-            action_dict = {}
-            unknown_actions = []
+                       "up right", "up", "up left"]
+            biggest_q = -10000
+            best_action = 'stay'
+            best_events = []
+
             for action in actions:
-                if (state, action) in Qs:
-                    action_dict[action] = Qs[state, action], 0
-                else:
-                    n_unexplored += 1
-                    unknown_actions.append(action)
-                    action_dict[action] = 1
+                new_bomberman = next(iter(wrld.characters.values()))
+                new_bomberman = new_bomberman[0]
 
-            count = 0
-            # if sum != 10:
-            best_action = "stay"
-            best_value = -100000
+                if action == "up left":
+                    new_bomberman.move(-1, -1)
+                elif action == "up":
+                    new_bomberman.move(0, -1)
+                elif action == "up right":
+                    new_bomberman.move(1, -1)
+                elif action == "left":
+                    new_bomberman.move(-1, 0)
+                elif action == "stay":
+                    new_bomberman.move(0, 0)
+                elif action == "right":
+                    new_bomberman.move(1, 0)
+                elif action == "down left":
+                    new_bomberman.move(-1, 1)
+                elif action == "down":
+                    new_bomberman.move(0, 1)
+                elif action == "down right":
+                    new_bomberman.move(1, 1)
+                elif action == "bomb":
+                    new_bomberman.place_bomb()
 
-            eps = 0.0 + n_unexplored
+                next_wrld, events = wrld.next()
 
-            if random.random() < eps:
-                print("RANDOM ACTION!", n_unexplored)
-                if unknown_actions:
-                    rand = random.randint(1, n_unexplored)
-                    self.action = unknown_actions[rand - 1]
-                else:
-                    rand = random.randint(1, 10)
-                    self.action = actions[rand - 1]
-                return
-            else:
-                known_state = False
-                for action in actions:
-                    if (state, action) in Qs and Qs[state, action] > best_value:
-                        known_state = True
-                        best_action = action
-                        best_value = Qs[state, action]
+                next_state = self.calc_values(next_wrld)
+                next_q = self.calc_q(next_state)
 
-                if known_state:
-                    self.action = best_action
-                else:
-                    print("RANDOM ACTION!")
-                    rand = random.randint(1, 10)
-                    self.action = actions[rand - 1]
-                return
+                reward = self.reward(best_events, action)
+
+                delta = reward + self.gamma * next_q - q_current
+                for i, weight in enumerate(self.weights):
+                    self.weights[i] += self.alpha * delta * s_current[i]
+
+                next_q = self.calc_q(next_state)
+
+                if next_q > biggest_q:
+                    biggest_q = next_q
+                    best_action = action
+                    best_events = events
+
+            self.action = best_action
+            # self.save_weights()
+
         else:
             self.action = "path"
             self.path = path_to_goal
 
-    def convertAng(self, angle):
-        tolerance = 0.001
-        if angle is None:
-            angle = None
-        elif abs(angle - 0) < tolerance:
-            angle = 'E'
-        elif abs(angle - math.pi/2) < tolerance:
-            angle = 'S'
-        elif abs(angle - math.pi) < tolerance:
-            angle = 'W'
-        elif abs(angle + math.pi/2) < tolerance:
-            angle = 'N'
-        elif 0 < angle < math.pi/2:
-            angle = 'SE'
-        elif math.pi/2 < angle < math.pi:
-            angle = 'SW'
-        elif -math.pi < angle < -math.pi/2:
-            angle = 'NW'
-        elif -math.pi/2 < angle < 0:
-            angle = 'NE'
-        elif angle == 404:
-            angle = "ON TOP"
-        return angle
+    def calc_q(self, state):
+        q = 0
+        for i, weight in enumerate(self.weights):
+            q += weight * state[i]
+        return q
 
-    def get_next_move(self):
-        return self.action
+    def reward(self, events, action):
+        r = -0.01
+        for e in events:
+            if e.tpe == Event.BOMB_HIT_CHARACTER:
+                r -= 1
+            elif e.tpe == Event.BOMB_HIT_WALL:
+                r += 0.1
+            elif e.tpe == Event.BOMB_HIT_MONSTER:
+                r += 0.5
+            elif e.tpe == Event.CHARACTER_KILLED_BY_MONSTER:
+                r -= 1
+            elif e.tpe == Event.CHARACTER_FOUND_EXIT:
+                r += 1
+        if action == "down left" or action == "down right" or action == "down":
+            r+= 0.05
+        return r
+
+    def save_weights(self):
+        f = open("weights.txt", 'w')
+        f.write("w_path = " + str(self.weights[0]) + " \n")
+        f.write("w_goal_dist = " + str(self.weights[1]) + "\n")
+        f.write("w_bomb_dist = " + str(self.weights[2]) + "\n")
+        f.write("w_monster_dist = " + str(self.weights[3]) + "\n")

@@ -1,7 +1,4 @@
-w_bomb_down = 2
-w_goal_dist = 4
-w_bomb_ang = 2646
-w_close_walls = 262
-w_close_boundaries = 184
-w_monster = 1077
-w_down_weight = -4
+w_path = 1.0 
+w_goal_dist = 0.7292481250099078
+w_bomb_dist = -3.933012291070983
+w_monster_dist = -2.5865437632669748
