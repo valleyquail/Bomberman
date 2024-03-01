@@ -11,11 +11,14 @@ from priority_queue import PriorityQueue
 
 class TestCharacter(CharacterEntity):
     action = "stay"
+    path = None
     def do(self, wrld):
         Qs = np.load("qs.npy", allow_pickle=True).item()
         self.next_move(wrld, Qs)
         action = self.action
-        # print(Qs, action)
+        # print(Qs)
+        # print(self.calc_values(wrld))
+        print(action)
 
         if action == "up left":
             self.move(-1, -1)
@@ -37,6 +40,8 @@ class TestCharacter(CharacterEntity):
             self.move(1, 1)
         elif action == "bomb":
             self.place_bomb()
+        elif action == "path":
+            self.move(self.path[1][0] - self.x, self.path[1][1] - self.y)
 
 
 
@@ -68,6 +73,7 @@ class TestCharacter(CharacterEntity):
                 while came_from[node] is not None:
                     path.insert(0, node)
                     node = came_from[node]
+                path.insert(0, start)
 
                 return path
 
@@ -135,10 +141,10 @@ class TestCharacter(CharacterEntity):
 
     def boundaries(self, wrld):
         boundaries = []
-        for x in range(wrld.width()):
+        for x in range(-1, wrld.width()+1):
             boundaries.append((x, -1))
             boundaries.append((x, wrld.height()))
-        for y in range(wrld.height()):
+        for y in range(0, wrld.height()):
             boundaries.append((-1, y))
             boundaries.append((wrld.width(), y))
 
@@ -152,143 +158,207 @@ class TestCharacter(CharacterEntity):
             goal_dist = len(path_to_goal)
             goal_ang = math.atan2(self.y - goal[1], self.x - goal[0])
         else:
-            goal_dist = 26
+            goal_dist = 100
             goal_ang = 0
-        #
-        #
-        # monster_paths = []
-        # for monster in self.monsters(wrld):
-        #     result = self.a_star((self.x, self.y), monster, wrld)
-        #     if result is not None:
-        #         monster_paths.append(result)
-        #
-        # monster = (0,0)
-        # if monster_paths:
-        #     monster_dist = len(monster_paths[0])
-        #     monster_ang = math.atan2(monster_paths[0][0][1] - self.y, monster_paths[0][0][0] - self.x)
-        #     for path in monster_paths:
-        #         if len(path) < monster_dist:
-        #             monster_dist = len(path)
-        #             monster_ang = math.atan2(path[0][1] - self.y, path[0][0] - self.x)
-        #             monster = path[0]
-        # else:
-        #     monster_dist = 26
-        #     monster_ang = 0
-        #
+
+
         explosion_paths = []
         for explosion in self.explosions(wrld):
             result = self.a_star((self.x, self.y), explosion, wrld)
             if result is not None:
                 explosion_paths.append(result)
 
-        explosion_to_self = (26, 26)
         explosion = None
         if explosion_paths:
             explosion_dist = len(explosion_paths[0])
+            explosion = explosion_paths[0][0]
             explosion_ang = math.atan2(explosion_paths[0][0][1] - self.y, explosion_paths[0][0][0] - self.x)
+
+            if self.y == explosion[1] and self.x == explosion[0]:
+                explosion_ang = 404
+
             for path in explosion_paths:
                 if len(path) < explosion_dist:
+
                     explosion_dist = len(path)
                     explosion_ang = math.atan2(path[0][1] - self.y, path[0][0] - self.x)
                     explosion = path[0]
-                    explosion_to_self = (explosion[0] - self.x, explosion[1] - self.y)
 
+                    if self.y == explosion[1] and self.x == explosion[0]:
+                        explosion_ang = 404
         else:
-            explosion_dist = 26
             explosion_ang = None
 
-
         bomb = self.bomb(wrld)
-        path_to_bomb = self.a_star(bomb, (self.x, self.y), wrld)
+        path_to_bomb = self.a_star((self.x, self.y), bomb, wrld)
         if path_to_bomb is not None:
             bomb_dist = len(path_to_bomb)
-            bomb_ang = math.atan2(self.y - bomb[1], self.x - bomb[0])
+            bomb_ang = math.atan2(bomb[1] - self.y, bomb[0] - self.x)
             if self.y == bomb[1] and self.x == bomb[0]:
                 bomb_ang = 404
         else:
             bomb_dist = 26
             bomb_ang = None
 
-        bomb_danger = 0
-        if bomb_ang is not None and (abs(bomb_ang - 0) < 0.01 or abs(bomb_ang - math.pi/2) < 0.01 or abs(bomb_ang - math.pi) < 0.01 or abs(bomb_ang + math.pi/2) < 0.01):
-            bomb_danger = 1
-
-        can_bomb = 1
+        bomb_down = 0
         bomb_to_self = (26, 26)
-
-        if bomb:
-            can_bomb = 0
-            bomb_to_self = (bomb[0] - self.x, bomb[1] - self.y)
         if explosion:
-            can_bomb = 0
-            bomb_to_self = explosion_to_self
             bomb_ang = explosion_ang
 
+        bomb_ang = self.convertAng(bomb_ang)
+
+        monster_paths = []
+        for monster in self.monsters(wrld):
+            result = self.a_star((self.x, self.y), monster, wrld)
+            if result is not None:
+                monster_paths.append(result)
+
+        monster = None
+        monster_to_self = None
+        if monster_paths:
+            monster_dist = len(monster_paths[0])
+            monster_ang = math.atan2(monster_paths[0][0][1] - self.y, monster_paths[0][0][0] - self.x)
+            monster = monster_paths[0][0]
+            if monster_dist <= 4 and abs(monster[0] - self.x) <= 4 and abs(monster[1] - self.y) <= 4:
+                monster_to_self = (max(min(monster[0] - self.x, 4), -4), max(min(monster[1] - self.y, 4), -4))
+
+            if self.y == monster[1] and self.x == monster[0]:
+                monster_ang = 404
+
+            for path in monster_paths:
+                if len(path) < monster_dist:
+                    monster_dist = len(path)
+                    monster_ang = math.atan2(path[0][1] - self.y, path[0][0] - self.x)
+                    monster = path[0]
+                    if monster_dist <= 4 and abs(monster[0] - self.x) <= 4 and abs(monster[1] - self.y) <= 4:
+                        monster_to_self = (max(min(monster[0] - self.x, 4), -4), max(min(monster[1] - self.y, 4), -4))
+
+                    if self.y == monster[1] and self.x == monster[0]:
+                        monster_ang = 404
+        else:
+            monster_dist = 100
+            monster_ang = None
 
         walls = self.walls(wrld)
-        walls += self.boundaries(wrld)
-        # print(self.boundaries(wrld))
-
         wall_to_self = (26, 26)
         wall_dist = 26
         wall_ang = None
 
         close_walls = []
         for wall in walls:
-            dist = (wall[0] - self.x, wall[1] - self.y)
+            dist = (self.x - wall[0], self.y - wall[1])
             if (dist == (1, 1) or dist == (1, 0) or dist == (1, -1) or dist == (0, 1) or
                     dist == (0, 0) or dist == (0, -1) or dist == (-1, 1) or dist == (-1, 0) or dist == (-1, -1)):
+                if dist == (1,1):
+                    dist = 'NW'
+                elif dist == (1,0):
+                    dist = 'W'
+                elif dist == (1,-1):
+                    dist = 'SW'
+                elif dist == (0,1):
+                    dist = 'N'
+                elif dist == (0,0):
+                    dist = 'ON TOP'
+                elif dist == (0,-1):
+                    dist = 'S'
+                elif dist == (-1,1):
+                    dist = 'NE'
+                elif dist == (-1,0):
+                    dist = 'E'
+                elif dist == (-1,-1):
+                    dist = 'SE'
+
                 close_walls.append(dist)
 
-        # print("bomb", bomb_ang, path_to_bomb is None)
-        bomb_ang = self.convertAng(bomb_ang)
-        wall_ang = self.convertAng(wall_ang)
-        goal_ang = self.convertAng(goal_ang)
+        boundaries = self.boundaries(wrld)
+        close_boundaries = []
+        for boundary in boundaries:
+            dist = (self.x - boundary[0], self.y - boundary[1])
 
-        return can_bomb, goal_dist, bomb_ang, tuple(close_walls)
+            if (dist == (1, 1) or dist == (1, 0) or dist == (1, -1) or dist == (0, 1) or
+                    dist == (0, 0) or dist == (0, -1) or dist == (-1, 1) or dist == (-1, 0) or dist == (-1, -1)):
+
+                if dist == (1,1):
+                    dist = 'NW'
+                elif dist == (1,0):
+                    dist = 'W'
+                elif dist == (1,-1):
+                    dist = 'SW'
+                elif dist == (0,1):
+                    dist = 'N'
+                elif dist == (0,0):
+                    dist = 'ON TOP'
+                elif dist == (0,-1):
+                    dist = 'S'
+                elif dist == (-1,1):
+                    dist = 'NE'
+                elif dist == (-1,0):
+                    dist = 'E'
+                elif dist == (-1,-1):
+                    dist = 'SE'
+                close_boundaries.append(dist)
+
+        close_walls.sort()
+        close_boundaries.sort()
+
+        return bomb_down, goal_dist+1, bomb_ang, tuple(close_walls), tuple(close_boundaries), monster_to_self
 
 
     def next_move(self, wrld, Qs):
         state = self.calc_values(wrld)
-        sum = 0
 
-        actions = ["down right", "down", "down left",
-                   "right", "stay", "left",
-                   "up right", "up", "up left", "bomb"]
-        action_dict = {}
-        for action in actions:
-            if (state, action) in Qs:
-                sum += max(Qs[state, action], 0)
-                action_dict[action] = max(Qs[state, action], 0)
+        goal = self.goal(wrld)
+        path_to_goal = self.a_star(goal, (self.x, self.y), wrld)
 
-            else:
-                sum += 1
-                action_dict[action] = 1
+        if not path_to_goal:
+            n_unexplored = 0
+            actions = ["down right", "down", "down left",
+                       "right", "stay", "left",
+                       "up right", "up", "up left", "bomb"]
+            action_dict = {}
+            unknown_actions = []
+            for action in actions:
+                if (state, action) in Qs:
+                    action_dict[action] = Qs[state, action], 0
+                else:
+                    n_unexplored += 1
+                    unknown_actions.append(action)
+                    action_dict[action] = 1
 
-        count = 0
-        if sum != 10:
+            count = 0
+            # if sum != 10:
             best_action = "stay"
             best_value = -100000
 
-            for action in actions:
-                if Qs[state, action] > best_value:
-                    best_action = action
-                    best_value = Qs[state, action]
+            eps = 0.0 + n_unexplored
 
-            # print(best_action, Qs[state, best_action])
+            if random.random() < eps:
+                print("RANDOM ACTION!", n_unexplored)
+                if unknown_actions:
+                    rand = random.randint(1, n_unexplored)
+                    self.action = unknown_actions[rand - 1]
+                else:
+                    rand = random.randint(1, 10)
+                    self.action = actions[rand - 1]
+                return
+            else:
+                known_state = False
+                for action in actions:
+                    if (state, action) in Qs and Qs[state, action] > best_value:
+                        known_state = True
+                        best_action = action
+                        best_value = Qs[state, action]
 
-            self.action = best_action
-            return
-            # rand = random.random() * sum
-            # for action in action_dict:
-            #     if count + action_dict[action] > rand:
-            #         self.action = action
-            #         return
-            #     count += action_dict[action]
+                if known_state:
+                    self.action = best_action
+                else:
+                    print("RANDOM ACTION!")
+                    rand = random.randint(1, 10)
+                    self.action = actions[rand - 1]
+                return
         else:
-            rand = random.randint(1, 10)
-            self.action = actions[rand-1]
-            return
+            self.action = "path"
+            self.path = path_to_goal
 
     def convertAng(self, angle):
         tolerance = 0.001
@@ -297,19 +367,19 @@ class TestCharacter(CharacterEntity):
         elif abs(angle - 0) < tolerance:
             angle = 'E'
         elif abs(angle - math.pi/2) < tolerance:
-            angle = 'N'
+            angle = 'S'
         elif abs(angle - math.pi) < tolerance:
             angle = 'W'
         elif abs(angle + math.pi/2) < tolerance:
-            angle = 'S'
+            angle = 'N'
         elif 0 < angle < math.pi/2:
-            angle = 'NE'
-        elif math.pi/2 < angle < math.pi:
-            angle = 'NW'
-        elif -math.pi < angle < -math.pi/2:
-            angle = 'SW'
-        elif -math.pi/2 < angle < 0:
             angle = 'SE'
+        elif math.pi/2 < angle < math.pi:
+            angle = 'SW'
+        elif -math.pi < angle < -math.pi/2:
+            angle = 'NW'
+        elif -math.pi/2 < angle < 0:
+            angle = 'NE'
         elif angle == 404:
             angle = "ON TOP"
         return angle
